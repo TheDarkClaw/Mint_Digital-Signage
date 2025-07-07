@@ -60,6 +60,17 @@ for file in ~/.profile ~/.bashrc; do
   echo '# KIOSK Proxy Einstellungen ENDE' >> \$file
 done
 "
+
+echo "==== Kiosk-Benutzer anlegen (falls nicht existierend) ===="
+if ! id "$KIOSK_USER" &>/dev/null; then
+    sudo adduser --disabled-password --gecos "" $KIOSK_USER
+    echo "$KIOSK_USER:$KIOSK_PASS" | sudo chpasswd
+fi
+sudo usermod -s /bin/bash $KIOSK_USER
+sudo deluser $KIOSK_USER sudo || true
+sudo deluser $KIOSK_USER adm || true
+sudo chmod 700 $KIOSK_HOME
+
 echo "==== Richtigen SSH-Server installieren und konfigurieren ===="
 sudo apt update
 sudo apt install -y openssh-server
@@ -240,17 +251,6 @@ echo "==== Automatische tägliche System-Updates aktivieren ===="
 echo "0 17 * * 1 root apt-get update && apt-get -y upgrade && apt-get -y autoremove && apt-get -y clean" | sudo tee /etc/cron.d/autoupdate_kiosk > /dev/null
 sudo chmod 644 /etc/cron.d/autoupdate_kiosk
 sudo systemctl restart cron
-
-
-echo "==== Kiosk-Benutzer anlegen (falls nicht existierend) ===="
-if ! id "$KIOSK_USER" &>/dev/null; then
-    sudo adduser --disabled-password --gecos "" $KIOSK_USER
-    echo "$KIOSK_USER:$KIOSK_PASS" | sudo chpasswd
-fi
-sudo usermod -s /bin/bash $KIOSK_USER
-sudo deluser $KIOSK_USER sudo || true
-sudo deluser $KIOSK_USER adm || true
-sudo chmod 700 $KIOSK_HOME
 
 echo "==== Willkommensnachricht für Kiosk-User abschalten ===="
 sudo -u $KIOSK_USER mkdir -p $KIOSK_HOME/.config/linuxmint

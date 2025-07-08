@@ -1,6 +1,7 @@
 #!/bin/bash
 
 set -e
+set -x
 
 xset s off
 xset s noblank
@@ -107,7 +108,7 @@ sudo ufw enable
 sudo ufw status verbose
 
 echo "==== Admin SSH-Schlüssel erzeugen (falls noch nicht vorhanden) ===="
-if [ ! -f "$ADMIN_KEYFILE" ]; then
+if [ ! -s "$ADMIN_AUTHKEYFILE" ]; then
     # SSH-Verzeichnis erstellen
     sudo -u $KIOSK_ADM mkdir -p "/home/$KIOSK_ADM/.ssh"
     
@@ -122,7 +123,7 @@ if [ ! -f "$ADMIN_KEYFILE" ]; then
     # WICHTIG: Passwort-Variable sofort löschen
     unset SSH_KEY_PASSWORD
     
-    # Public Key zu authorized_keys hinzufügen (mehrfachlauffähig)
+    # Public Key zu authorized_keys hinzufügen 
     if ! sudo -u $KIOSK_ADM grep -q "$(sudo cat "$ADMIN_KEYFILE.pub")" "$ADMIN_AUTHKEYFILE" 2>/dev/null; then
         sudo -u $KIOSK_ADM cat "$ADMIN_KEYFILE.pub" >> "$ADMIN_AUTHKEYFILE"
     fi
@@ -147,7 +148,7 @@ if [ ! -f "$ADMIN_KEYFILE" ]; then
     echo -e "${RED}WICHTIG: Führe den folgenden Befehl auf dem CLIENT-Computer aus:"
     echo
     echo "LINUX: scp -P $SSH_PORT $KIOSK_ADM@$(hostname -I | awk '{print $1}'):$ADMIN_KEYFILE ~/.ssh/$(hostname -s)_$KIOSK_ADM"
-    echo "WINDOWS: scp -P $SSH_PORT $KIOSK_ADM@$(hostname -I | awk '{print $1}'):$ADMIN_KEYFILE \"\$env:USERPROFILE\.ssh\$(hostname -s)_$KIOSK_ADM\""
+    echo "WINDOWS: scp -P $SSH_PORT $KIOSK_ADM@$(hostname -I | awk '{print $1}'):$ADMIN_KEYFILE \"\$env:USERPROFILE\.ssh\\$(hostname -s)_$KIOSK_ADM\""
     echo
     echo "LINUX: chmod 600 ~/.ssh/$(hostname -s)_$KIOSK_ADM"
     echo
@@ -196,7 +197,7 @@ else
     sudo cat "$ADMIN_KEYFILE.pub"
     echo
     
-    if [ -f "$ADMIN_KEYFILE.pub" ]; then
+    if [ -f "$ADMIN_KEYFILE" ]; then
         sudo sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config #Temp Download-Freigabe über UserPW
         sudo systemctl daemon-reload 
         sudo systemctl reload ssh || sudo systemctl restart ssh

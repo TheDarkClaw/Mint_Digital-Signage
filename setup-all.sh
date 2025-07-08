@@ -303,6 +303,7 @@ gsettings set org.cinnamon.settings-daemon.plugins.power sleep-inactive-ac-timeo
 # Dieses Skript nach der Ausführung löschen
 rm -f "$HOME/first-login-setup.sh"
 rm -f "$HOME/.config/autostart/first-login-setup.desktop"
+touch "$HOME/.kiosk_initialized"
 EOF
 
 sudo chmod +x "$KIOSK_HOME/first-login-setup.sh"
@@ -345,6 +346,12 @@ sudo chmod +x "$KIOSK_SCRIPT"
 
 sudo tee "$RELOAD_SCRIPT" > /dev/null <<EOF
 #!/bin/bash
+# Warte bis Chromium läuft
+while ! pgrep -x "chromium" > /dev/null; do
+    sleep 2
+done
+
+# Dann starte den Reload-Loop
 while true; do
     sleep $RELOAD_INTERVAL
     WINID=\$(xdotool search --onlyvisible --class 'chromium' | head -n1)
@@ -357,6 +364,33 @@ EOF
 
 sudo chmod +x "$RELOAD_SCRIPT"
 sudo chown $KIOSK_USER:$KIOSK_USER "$RELOAD_SCRIPT"
+
+echo "==== Kiosk-Launcher (intelligenter Starter) schreiben ===="
+sudo tee "$KIOSK_HOME/kiosk-launcher.sh" > /dev/null <<'EOF'
+#!/bin/bash
+
+# Warte auf X11/Display
+while ! xset q &>/dev/null; do
+    sleep 0.5
+done
+
+# Warte auf Window Manager (Cinnamon)
+while ! pgrep -x "cinnamon" > /dev/null; do
+    sleep 0.5
+done
+
+# Kurze zusätzliche Stabilisierungszeit nur beim ersten Start
+if [ ! -f "$HOME/.kiosk_initialized" ]; then
+    sleep 2  # Nur 2 Sekunden für gsettings
+    touch "$HOME/.kiosk_initialized"
+fi
+
+# Starte Kiosk
+exec $HOME/start-kiosk.sh
+EOF
+
+sudo chmod +x "$KIOSK_HOME/kiosk-launcher.sh"
+sudo chown $KIOSK_USER:$KIOSK_USER "$KIOSK_HOME/kiosk-launcher.sh"
 
 echo "==== Autostart für Kiosk-User ===="
 sudo -u $KIOSK_USER mkdir -p $KIOSK_HOME/.config/autostart
@@ -377,30 +411,29 @@ NoDisplay=true
 X-GNOME-Autostart-enabled=false
 EOF
 
-# 3. Dann das Kiosk-Skript mit leichter Verzögerung
+# 3. Dann das Kiosk-Skript 
 sudo tee "$KIOSK_DESKTOP" > /dev/null <<EOF
 [Desktop Entry]
 Type=Application
-Exec=bash -c "sleep 10 && $KIOSK_SCRIPT"
+Exec=$KIOSK_HOME/kiosk-launcher.sh
 Hidden=false
 X-GNOME-Autostart-enabled=true
 Name=Kiosk Mode
 Comment=Start Kiosk Mode
 EOF
-
 sudo chown $KIOSK_USER:$KIOSK_USER "$KIOSK_DESKTOP"
 
-# 4. Reload-Skript mit noch mehr Verzögerung
+
+# 4. Reload-Skript (wartet selbst auf Chromium)
 sudo tee "$KIOSK_HOME/.config/autostart/refresh-chromium.desktop" > /dev/null <<EOF
 [Desktop Entry]
 Type=Application
-Exec=bash -c "sleep 15 && $RELOAD_SCRIPT"
+Exec=$RELOAD_SCRIPT
 Hidden=false
 X-GNOME-Autostart-enabled=true
 Name=Chromium Auto-Reload
 Comment=Refresh Chromium periodically
 EOF
-
 sudo chown $KIOSK_USER:$KIOSK_USER "$KIOSK_HOME/.config/autostart/refresh-chromium.desktop"
 
 echo "==== LightDM Autologin konfigurieren ===="

@@ -79,6 +79,41 @@ Acquire::http::Proxy "$KIOSK_PROXY";
 Acquire::https::Proxy "$KIOSK_PROXY";
 EOF
 fi
+# Proxy für aktuelle Session aktivieren
+if [ -n "$KIOSK_PROXY" ]; then
+    # Für diese Shell-Session
+    export http_proxy="$KIOSK_PROXY"
+    export https_proxy="$KIOSK_PROXY"
+    export HTTP_PROXY="$KIOSK_PROXY"
+    export HTTPS_PROXY="$KIOSK_PROXY"
+    if [ -n "$KIOSK_NOPROXY" ]; then
+        export no_proxy="$KIOSK_NOPROXY"
+        export NO_PROXY="$KIOSK_NOPROXY"
+    fi
+    
+    echo "Proxy für diese Installation aktiviert: $KIOSK_PROXY"
+fi
+
+if [ -n "$KIOSK_PROXY" ]; then
+    echo "==== Teste Proxy-Verbindung ===="
+    if sudo apt update; then
+        echo "Proxy funktioniert für APT!"
+    else
+        echo "WARNUNG: APT update fehlgeschlagen - Proxy-Einstellungen prüfen!"
+        echo "Trotzdem fortfahren? (j/N)"
+        read CONTINUE
+        if [[ ! "$CONTINUE" =~ ^[Jj]$ ]]; then
+            exit 1
+        fi
+    fi
+fi
+
+# HIER: System aktualisieren
+echo "==== System aktualisieren ===="
+sudo apt update
+sudo apt upgrade -y
+sudo apt autoremove -y
+sudo apt clean
 
 echo "==== Kiosk-Benutzer anlegen (falls nicht existierend) ===="
 if ! id "$KIOSK_USER" &>/dev/null; then

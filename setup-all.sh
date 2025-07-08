@@ -17,6 +17,8 @@ KIOSK_VNC_PASS="$KIOSK_HOME/.vnc/passwd"
 KIOSK_VNC_PORT=5900
 ADMIN_KEYFILE="/home/$KIOSK_ADM/.ssh/id_ed25519"
 ADMIN_AUTHKEYFILE="/home/$KIOSK_ADM/.ssh/authorized_keys"
+LIGHTDM_CONF_DIR="/etc/lightdm/lightdm.conf.d"
+LIGHTDM_AUTLOGIN_FILE="$LIGHTDM_CONF_DIR/50-autologin.conf"
 
 sudo update-locale LANG=de_DE.UTF-8 LANGUAGE=de_DE
 
@@ -401,16 +403,18 @@ EOF
 sudo chown $KIOSK_USER:$KIOSK_USER "$KIOSK_HOME/.config/autostart/refresh-chromium.desktop"
 
 echo "==== LightDM Autologin konfigurieren ===="
-# Entferne ALLE alten autologin-Zeilen!
-sudo sed -i "/^autologin-user=/d" /etc/lightdm/lightdm.conf
-sudo sed -i "/^autologin-user-timeout=0/d" /etc/lightdm/lightdm.conf
 
-# Dann wieder eintragen, falls Block fehlt
-if grep -q '^\[Seat:\*\]' /etc/lightdm/lightdm.conf; then
-    sudo sed -i "/^\[Seat:\*\]/a autologin-user=$KIOSK_USER\nautologin-user-timeout=0" /etc/lightdm/lightdm.conf
-else
-    echo -e "[Seat:*]\nautologin-user=$KIOSK_USER\nautologin-user-timeout=0" | sudo tee -a /etc/lightdm/lightdm.conf
+# Verzeichnis anlegen, falls es fehlt
+if [ ! -d "$LIGHTDM_CONF_DIR" ]; then
+    sudo mkdir -p "$LIGHTDM_CONF_DIR"
 fi
+
+# Autologin-Config mit der gewünschten Variable immer überschreiben
+sudo bash -c "cat > '$LIGHTDM_AUTLOGIN_FILE' <<EOF
+[Seat:*]
+autologin-user=$KIOSK_USER
+autologin-user-timeout=0
+EOF"
 
 echo "==== VNC Passwort und Service ===="
 # Interaktives Passwort setzen

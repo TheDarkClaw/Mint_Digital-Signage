@@ -50,19 +50,35 @@ echo "Welcher SSH-Port soll verwendet werden? (Standard: 22)"
 read SSH_PORT
 SSH_PORT=${SSH_PORT:-22}
 
-# Proxy-Variablen in Profile/Bashrc einfuegen
-sudo -u $KIOSK_USER bash -c "
-for file in ~/.profile ~/.bashrc; do
-  # Alte Kiosk-Proxy-Zeilen entfernen (zwischen ##KIOSK-PROXY-BEGIN/END)
-  sed -i '/^# KIOSK Proxy Einstellungen/,/^# KIOSK Proxy Einstellungen ENDE/d' \$file
-  # Neue Werte hinzufügen, aber nur wenn gesetzt:
-  echo '# KIOSK Proxy Einstellungen' >> \$file
-  ${KIOSK_PROXY:+echo 'export http_proxy=\"$KIOSK_PROXY\"' >> \$file}
-  ${KIOSK_PROXY:+echo 'export https_proxy=\"$KIOSK_PROXY\"' >> \$file}
-  ${KIOSK_NOPROXY:+echo 'export no_proxy=\"$KIOSK_NOPROXY\"' >> \$file}
-  echo '# KIOSK Proxy Einstellungen ENDE' >> \$file
-done
-"
+# Proxy global setzen wenn angegeben
+if [ -n "$KIOSK_PROXY" ]; then
+    echo "==== Proxy global konfigurieren ===="
+    
+    # 1. Systemweite Umgebungsvariablen in /etc/environment
+    # Erst alte Einträge entfernen
+    sudo sed -i '/^http_proxy=/d' /etc/environment
+    sudo sed -i '/^https_proxy=/d' /etc/environment
+    sudo sed -i '/^no_proxy=/d' /etc/environment
+    sudo sed -i '/^HTTP_PROXY=/d' /etc/environment
+    sudo sed -i '/^HTTPS_PROXY=/d' /etc/environment
+    sudo sed -i '/^NO_PROXY=/d' /etc/environment
+    
+    # Dann neue hinzufügen (beide Schreibweisen für Kompatibilität)
+    {
+        echo "http_proxy=\"$KIOSK_PROXY\""
+        echo "https_proxy=\"$KIOSK_PROXY\""
+        echo "HTTP_PROXY=\"$KIOSK_PROXY\""
+        echo "HTTPS_PROXY=\"$KIOSK_PROXY\""
+        [ -n "$KIOSK_NOPROXY" ] && echo "no_proxy=\"$KIOSK_NOPROXY\""
+        [ -n "$KIOSK_NOPROXY" ] && echo "NO_PROXY=\"$KIOSK_NOPROXY\""
+    } | sudo tee -a /etc/environment > /dev/null
+    
+    # 2. APT-spezifische Proxy-Konfiguration
+    sudo tee /etc/apt/apt.conf.d/95proxy > /dev/null <<EOF
+Acquire::http::Proxy "$KIOSK_PROXY";
+Acquire::https::Proxy "$KIOSK_PROXY";
+EOF
+fi
 
 echo "==== Kiosk-Benutzer anlegen (falls nicht existierend) ===="
 if ! id "$KIOSK_USER" &>/dev/null; then

@@ -145,7 +145,7 @@ sudo sed -i 's/^#*PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/ssh
 sudo sed -i '/^AllowUsers/d' /etc/ssh/sshd_config
 echo "AllowUsers $KIOSK_ADM" | sudo tee -a /etc/ssh/sshd_config
 sudo systemctl daemon-reload 
-sudo systemctl reload ssh || sudo systemctl restart ssh
+sudo systemctl restart ssh
 
 echo "==== Firewall (UFW) aktivieren: Nur SSH-Port $SSH_PORT offen ===="
 sudo apt-get install -y ufw
@@ -302,9 +302,57 @@ unset DELETE_KEY 2>/dev/null || true
 
 
 echo "==== Automatische tägliche System-Updates aktivieren ===="
-echo "0 17 * * 1 root apt-get update && apt-get -y upgrade && apt-get -y autoremove && apt-get -y clean" | sudo tee /etc/cron.d/autoupdate_kiosk > /dev/null
-sudo chmod 644 /etc/cron.d/autoupdate_kiosk
-sudo systemctl restart cron
+# 1: Globale Updates
+sudo apt-get update
+sudo apt-get install -y unattended-upgrades apt-listchanges
+
+# 2: unattended-upgrades aktivieren
+sudo dpkg-reconfigure --priority=low unattended-upgrades
+
+# 3: Updates und Security (falls auskommentiert) aktivieren
+sudo sed -i 's#^//\(.*-updates";\)#\1#' /etc/apt/apt.conf.d/50unattended-upgrades
+sudo sed -i 's#^//\(.*-security";\)#\1#' /etc/apt/apt.conf.d/50unattended-upgrades
+
+# 4: Zeiten berechnen
+UPDATE_TIME=$(date --date="${SHUTDOWN_TIME} 1 hour ago" +%H:%M)
+UPDATE_HOUR=$(echo $UPDATE_TIME | cut -d: -f1)
+UPDATE_MIN=$(echo $UPDATE_TIME | cut -d: -f2)
+
+echo "Automatische Updates werden jetzt täglich um $UPDATE_TIME Uhr ausgelöst (1 Stunde vor Shutdown $SHUTDOWN_TIME)"
+
+# 5: Systemd-Timer/Service einrichten (wird bei jedem Lauf überschrieben = mehrfachlauffähig!)
+SERVICE_FILE=/etc/systemd/system/unattended-upgrades-manual.service
+TIMER_FILE=/etc/systemd/system/unattended-upgrades-manual.timer
+
+# Service für einmaligen Trigger
+sudo bash -c "cat > $SERVICE_FILE" <<EOF
+[Unit]
+Description=Manuelles Auslösen von unattended-upgrades
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/flock -n /var/lock/unattended_upgrade_manual.lock /usr/bin/unattended-upgrade -d
+EOF
+
+# Timer (Zeit dynamisch per Skript gesetzt!)
+sudo bash -c "cat > $TIMER_FILE" <<EOF
+[Unit]
+Description=Täglicher Trigger für unattended-upgrades (1 Stunde vor Shutdown)
+
+[Timer]
+OnCalendar=*-*-* ${UPDATE_HOUR}:${UPDATE_MIN}:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+
+# Schritt 6: Timer aktivieren/updaten (mehrfachlauffähig)
+sudo systemctl daemon-reload
+sudo systemctl enable --now unattended-upgrades-manual.timer
+
+# Log-Hinweis
+echo "Logs: /var/log/unattended-upgrades/ (oder /var/log/unattended-upgrades/manual-trigger.log für den flock-Job)"
 
 echo "==== Willkommensnachricht für Kiosk-User abschalten ===="
 sudo -u $KIOSK_USER mkdir -p $KIOSK_HOME/.config/linuxmint

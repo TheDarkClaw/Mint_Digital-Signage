@@ -66,66 +66,13 @@ for file in /etc/environment /etc/profile /etc/bash.bashrc; do
     fi
 done
 
-if [[ "$PROXY_FOUND" == "1" ]]; then
+if [[ -n "$KIOSK_PROXY" && $PROXY_FOUND -eq 1 ]]; then
     # === Benutzerabfrage ===
     while true; do
         read -p "Bereits Proxy-Einträge gefunden.Trozdem überschreiben? (j/n): " antwort
         case "$antwort" in
             [jJ])
-                if [ -n "$KIOSK_PROXY" ]; then
-                    echo "==== Proxy global konfigurieren ===="
-                    
-                    # 1. Systemweite Umgebungsvariablen in /etc/environment
-                    # Erst alte Einträge entfernen
-                    sudo sed -i '/^http_proxy=/d' /etc/environment
-                    sudo sed -i '/^https_proxy=/d' /etc/environment
-                    sudo sed -i '/^no_proxy=/d' /etc/environment
-                    sudo sed -i '/^HTTP_PROXY=/d' /etc/environment
-                    sudo sed -i '/^HTTPS_PROXY=/d' /etc/environment
-                    sudo sed -i '/^NO_PROXY=/d' /etc/environment
-                    
-                    # Dann neue hinzufügen (beide Schreibweisen für Kompatibilität)
-                    {
-                        echo "http_proxy=\"$KIOSK_PROXY\""
-                        echo "https_proxy=\"$KIOSK_PROXY\""
-                        echo "HTTP_PROXY=\"$KIOSK_PROXY\""
-                        echo "HTTPS_PROXY=\"$KIOSK_PROXY\""
-                        [ -n "$KIOSK_NOPROXY" ] && echo "no_proxy=\"$KIOSK_NOPROXY\""
-                        [ -n "$KIOSK_NOPROXY" ] && echo "NO_PROXY=\"$KIOSK_NOPROXY\""
-                    } | sudo tee -a /etc/environment > /dev/null
-                    
-                    # 2. APT-spezifische Proxy-Konfiguration
-                    sudo tee /etc/apt/apt.conf.d/95proxy > /dev/null <<EOF
-Acquire::http::Proxy "$KIOSK_PROXY";
-Acquire::https::Proxy "$KIOSK_PROXY";
-EOF
-
-                    # Proxy für aktuelle Session aktivieren
-
-                    # Für diese Shell-Session
-                    export http_proxy="$KIOSK_PROXY"
-                    export https_proxy="$KIOSK_PROXY"
-                    export HTTP_PROXY="$KIOSK_PROXY"
-                    export HTTPS_PROXY="$KIOSK_PROXY"
-                    if [ -n "$KIOSK_NOPROXY" ]; then
-                        export no_proxy="$KIOSK_NOPROXY"
-                        export NO_PROXY="$KIOSK_NOPROXY"
-                    fi
-                    
-                    echo "Proxy für diese Installation aktiviert: $KIOSK_PROXY"
-
-                    echo "==== Teste Proxy-Verbindung ===="
-                    if sudo apt update; then
-                        echo "Proxy funktioniert für APT!"
-                    else
-                        echo "WARNUNG: APT update fehlgeschlagen - Proxy-Einstellungen prüfen!"
-                        echo "Trotzdem fortfahren? (j/N)"
-                        read CONTINUE
-                        if [[ ! "$CONTINUE" =~ ^[Jj]$ ]]; then
-                            exit 1
-                        fi
-                    fi
-                fi
+                PROXY_FOUND=0
                 break
                 ;;
             [nN])
@@ -139,6 +86,60 @@ EOF
     done
 fi
 
+if [[ -n "$KIOSK_PROXY" && $PROXY_FOUND -eq 0 ]]; then
+    echo "==== Proxy global konfigurieren ===="
+    
+    # 1. Systemweite Umgebungsvariablen in /etc/environment
+    # Erst alte Einträge entfernen
+    sudo sed -i '/^http_proxy=/d' /etc/environment
+    sudo sed -i '/^https_proxy=/d' /etc/environment
+    sudo sed -i '/^no_proxy=/d' /etc/environment
+    sudo sed -i '/^HTTP_PROXY=/d' /etc/environment
+    sudo sed -i '/^HTTPS_PROXY=/d' /etc/environment
+    sudo sed -i '/^NO_PROXY=/d' /etc/environment
+    
+    # Dann neue hinzufügen (beide Schreibweisen für Kompatibilität)
+    {
+        echo "http_proxy=\"$KIOSK_PROXY\""
+        echo "https_proxy=\"$KIOSK_PROXY\""
+        echo "HTTP_PROXY=\"$KIOSK_PROXY\""
+        echo "HTTPS_PROXY=\"$KIOSK_PROXY\""
+        [ -n "$KIOSK_NOPROXY" ] && echo "no_proxy=\"$KIOSK_NOPROXY\""
+        [ -n "$KIOSK_NOPROXY" ] && echo "NO_PROXY=\"$KIOSK_NOPROXY\""
+    } | sudo tee -a /etc/environment > /dev/null
+    
+    # 2. APT-spezifische Proxy-Konfiguration
+    sudo tee /etc/apt/apt.conf.d/95proxy > /dev/null <<EOF
+Acquire::http::Proxy "$KIOSK_PROXY";
+Acquire::https::Proxy "$KIOSK_PROXY";
+EOF
+
+    # Proxy für aktuelle Session aktivieren
+
+    # Für diese Shell-Session
+    export http_proxy="$KIOSK_PROXY"
+    export https_proxy="$KIOSK_PROXY"
+    export HTTP_PROXY="$KIOSK_PROXY"
+    export HTTPS_PROXY="$KIOSK_PROXY"
+    if [ -n "$KIOSK_NOPROXY" ]; then
+        export no_proxy="$KIOSK_NOPROXY"
+        export NO_PROXY="$KIOSK_NOPROXY"
+    fi
+    
+    echo "Proxy für diese Installation aktiviert: $KIOSK_PROXY"
+
+    echo "==== Teste Proxy-Verbindung ===="
+    if sudo apt update; then
+        echo "Proxy funktioniert für APT!"
+    else
+        echo "WARNUNG: APT update fehlgeschlagen - Proxy-Einstellungen prüfen!"
+        echo "Trotzdem fortfahren? (j/N)"
+        read CONTINUE
+        if [[ ! "$CONTINUE" =~ ^[Jj]$ ]]; then
+            exit 1
+        fi
+    fi
+fi
 
 
 # HIER: System aktualisieren

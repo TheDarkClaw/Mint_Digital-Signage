@@ -1,7 +1,11 @@
 #!/bin/bash
 
 set -e
-set -x
+read -t 10 -p "Debugging aktivieren (set -x)? (j/N) " DEBUGGING || \
+    echo "Keine Eingabe nach 10 Sekunden – Debugging bleibt aus."
+
+    [[ "$DEBUGGING" =~ ^[Jj]$ ]] && set -x  # set -x nur aktivieren, wenn explizit bestätigt
+
 
 xset s off
 xset s noblank
